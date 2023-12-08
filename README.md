@@ -1,4 +1,6 @@
-# DiffDash Drone
+![Diff Dash Drone@0 2x](https://github.com/Mocksi/DiffDashDrone/assets/63699/65e0f93e-2eaa-40b6-8388-995f177accd5)
+# Your Wingman in Decoding and Defeating Bugs
+
 
 ## Overview
 
