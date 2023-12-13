@@ -1,6 +1,6 @@
 ![Diff Dash Drone@0 2x](https://github.com/Mocksi/DiffDashDrone/assets/63699/65e0f93e-2eaa-40b6-8388-995f177accd5)
-# Your Wingman in Decoding and Defeating Bugs
 
+# Your Wingman in Decoding and Defeating Bugs
 
 ## Overview
 
@@ -66,17 +66,18 @@ Note: If neither `--parquet` nor `--bugspots` are specified, both a Parquet file
 
 ## TODO:
 
-- [ ] Add a --help option
-- [ ] Add a --version option
-- [ ] Add a --parquet option
-- [ ] Add a --bugspots option
-- [ ] Add a --prediction option
 - [x] Create a Storage package
+- [x] Store all Git data in a DuckDB database.
 - [ ] Create an Analyzer package
 - [ ] Create a Reporter package
 - [ ] Hook up to the LLM cli
 - [ ] Make magic happen
 - [ ] Build release binaries
+- [ ] Add a --help option
+- [ ] Add a --version option
+- [ ] Add a --parquet option
+- [ ] Add a --bugspots option
+- [ ] Add a --prediction option
 
 ## Queries:
 
