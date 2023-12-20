@@ -37,13 +37,15 @@ func SetupDuckDb(c Config) (rd *RepoDatabase, err error) {
 		return nil, err
 	}
 
-	path_without_file := c.StoragePath[:len(c.StoragePath)-len("/repos.duckdb")]
-	err = createDirIfNotExist(path_without_file)
+	err = createDirIfNotExist(c.StoragePath)
 	if err != nil {
 		return nil, err
 	}
 
-	db, err := sql.Open("duckdb", c.StoragePath)
+	// FIXME: enable handling multiple Git repositories
+	dbPath := fmt.Sprintf("%s/repos.db", c.StoragePath)
+
+	db, err := sql.Open("duckdb", dbPath)
 	if err != nil {
 		return nil, err
 	}
@@ -58,6 +60,14 @@ func SetupDuckDb(c Config) (rd *RepoDatabase, err error) {
 		Database:   db,
 		Config:     c,
 	}, err
+}
+
+func Query(db *sql.DB, query string) (*sql.Rows, error) {
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
 }
 
 func CreateSchema(db *sql.DB) error {
@@ -119,8 +129,9 @@ func (rd *RepoDatabase) ExtractCommits() error {
 	var ErrExitLoop = errors.New("exit loop")
 
 	count := 0
+	// FIXME: remove limit or at least make it configurable.
+	limit := 1000
 	err = cIter.ForEach(func(c *object.Commit) error {
-		// FIXME: remove this stopgap
 		if count >= 1000 {
 			cIter.Close()
 			return ErrExitLoop
@@ -160,7 +171,7 @@ func (rd *RepoDatabase) ExtractCommits() error {
 				return err
 			}
 		}
-		fmt.Printf("\r%d/1000 commits processed", count)
+		fmt.Printf("\r%d/%d commits processed", count, limit)
 		count++
 
 		return nil

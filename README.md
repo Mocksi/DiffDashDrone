@@ -68,7 +68,7 @@ Note: If neither `--parquet` nor `--bugspots` are specified, both a Parquet file
 
 - [x] Create a Storage package
 - [x] Store all Git data in a DuckDB database.
-- [ ] Create an Analyzer package
+- [x] Create an Analyzer package
 - [ ] Create a Reporter package
 - [ ] Hook up to the LLM cli
 - [ ] Make magic happen
@@ -78,9 +78,4 @@ Note: If neither `--parquet` nor `--bugspots` are specified, both a Parquet file
 - [ ] Add a --parquet option
 - [ ] Add a --bugspots option
 - [ ] Add a --prediction option
-
-## Queries:
-
-```sql
-SELECT count(\*) as ctn, filename FROM commits WHERE regexp_matches(message, '(fix?|fix(es|ed)?|close(s|d)?|revert(s|d)?)') GROUP BY filename ORDER BY ctn DESC;
-```
+- [ ] Enable having multiple repositories/multiple database files

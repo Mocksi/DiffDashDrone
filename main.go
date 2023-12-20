@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/mocksi/diffdash-drone/analysis"
 	"github.com/mocksi/diffdash-drone/storage"
 )
 
@@ -14,9 +15,10 @@ func main() {
 		log.Fatalf("Usage: %s <path-to-repo>", os.Args[1])
 	}
 
+	// TODO: allow config to be configurable by the user
 	config := storage.Config{
 		BaseBranch:  "main",
-		StoragePath: "/tmp/diff_dash/repos.duckdb",
+		StoragePath: "/tmp/diff_dash",
 		RepoPath:    os.Args[1],
 	}
 
@@ -25,11 +27,28 @@ func main() {
 	if err != nil {
 		log.Fatalf("Could not create DB: %v", err)
 	}
-	err = repoDatabase.ExtractCommits()
+	var numCommits int
+	err = analysis.CountCommits(repoDatabase).Scan(&numCommits)
 	if err != nil {
-		log.Fatalf("Error processing commits: %v", err)
+		log.Fatalf("Could not open DB: %v", err)
+	}
+
+	if numCommits < 1 {
+		fmt.Println("No commits found. Extracting commits...")
+
+		err = repoDatabase.ExtractCommits()
+		if err != nil {
+			log.Fatalf("Error processing commits: %v", err)
+		}
 	}
 
 	fmt.Println("Successfully processed all commits.")
+	err = analysis.FindBugspots(repoDatabase)
+	if err != nil {
+		log.Fatalf("Error finding bugspots commits: %v", err)
+	}
+
+	fmt.Println("Successfully found bugspots. Generating parquet file...")
+
 	defer repoDatabase.Close()
 }
