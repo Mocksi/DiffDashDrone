@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 	"time"
 
 	"os"
@@ -132,7 +133,7 @@ func (rd *RepoDatabase) ExtractCommits() error {
 	// FIXME: remove limit or at least make it configurable.
 	limit := 1000
 	err = cIter.ForEach(func(c *object.Commit) error {
-		if count >= 1000 {
+		if count >= limit {
 			cIter.Close()
 			return ErrExitLoop
 		}
@@ -151,26 +152,52 @@ func (rd *RepoDatabase) ExtractCommits() error {
 		if err != nil {
 			return err
 		}
-
 		fIter, err := c.Files()
-
 		if err != nil {
 			return err
 		}
 
-		for {
-			f, err := fIter.Next()
-			if err != nil {
-				if err == io.EOF {
-					break
+		var wg sync.WaitGroup
+		errorsChan := make(chan error, 1) // Buffered channel for error
+
+		sem := make(chan struct{}, 10) // Limit concurrent goroutines
+
+		go func() {
+			for {
+				f, err := fIter.Next()
+				if err != nil {
+					if err == io.EOF {
+						break
+					}
+					errorsChan <- err
+					return
 				}
-				return err
+
+				wg.Add(1)
+				sem <- struct{}{} // Acquire a token
+				go func(file *object.File) {
+					defer wg.Done()
+					defer func() { <-sem }() // Release the token
+					err := rd.InsertFile(c, file)
+					if err != nil {
+						errorsChan <- err
+						return
+					}
+				}(f)
 			}
-			err = rd.InsertFile(c, f)
+		}()
+
+		go func() {
+			wg.Wait()
+			close(errorsChan)
+		}()
+
+		for err := range errorsChan {
 			if err != nil {
-				return err
+				return err // Return the first error that occurred
 			}
 		}
+
 		fmt.Printf("\r%d/%d commits processed", count, limit)
 		count++
 
