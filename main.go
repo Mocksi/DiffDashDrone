@@ -18,7 +18,7 @@ func main() {
 	// TODO: allow config to be configurable by the user
 	config := storage.Config{
 		BaseBranch:  "main",
-		StoragePath: "/tmp/diff_dash",
+		StoragePath: "./",
 		RepoPath:    os.Args[1],
 	}
 
@@ -48,7 +48,11 @@ func main() {
 		log.Fatalf("Error finding bugspots commits: %v", err)
 	}
 
-	fmt.Println("Successfully found bugspots. Generating parquet file...")
+	fmt.Println("Successfully found bugspots. Analyzing bugspots...")
+	err = analysis.AnalyzeWithLLM(repoDatabase)
+	if err != nil {
+		log.Fatalf("Error analyzing bugspots: %v", err)
+	}
 
 	defer repoDatabase.Close()
 }

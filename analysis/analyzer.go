@@ -2,7 +2,9 @@ package analysis
 
 import (
 	"database/sql"
+	"encoding/csv"
 	"fmt"
+	"os"
 
 	"github.com/mocksi/diffdash-drone/storage"
 )
@@ -83,7 +85,7 @@ func CountCommits(rd *storage.RepoDatabase) *sql.Row {
 	return rd.Database.QueryRow(query)
 }
 
-func QueryForExport(rd *storage.RepoDatabase) *sql.Row {
+func QueryForExport(rd *storage.RepoDatabase) (*sql.Rows, error) {
 	query := `
 		WITH all_commits AS (
 			SELECT f.name as filename, COUNT(DISTINCT c.hash) as all_count
@@ -102,11 +104,66 @@ func QueryForExport(rd *storage.RepoDatabase) *sql.Row {
 			FROM all_commits ac
 			LEFT JOIN fix_commits fc ON ac.filename = fc.filename
 		)
-		SELECT DISTINCT bss.filename, c.message, c.author_email, c.hash, bss.bug_spot_likelihood
+		SELECT DISTINCT bss.filename, c.message, c.author_email, c.hash, bss.bug_spot_likelihood,  c.commit_timestamp
 		FROM bug_spot_scores bss
 		JOIN repos.file f ON bss.filename = f.name
 		JOIN repos.commits c ON f.commit_hash = c.hash
 		ORDER BY bss.filename, c.commit_timestamp DESC;
 	`
-	return rd.Database.QueryRow(query)
+	return rd.Database.Query(query)
+}
+
+func AnalyzeWithLLM(rd *storage.RepoDatabase) error {
+	rows, err := QueryForExport(rd)
+	if err != nil {
+		return err
+	}
+	// FIXME: we must use Parquet because CSV files are too large to be practical.
+	csvFile, err := os.Create("output.csv")
+	if err != nil {
+		return err
+	}
+
+	writer := csv.NewWriter(csvFile)
+	columns, err := rows.Columns()
+	if err != nil {
+		return err
+	}
+	if err := writer.Write(columns); err != nil {
+		return err
+	}
+	for rows.Next() {
+		// Create a slice of empty interfaces to hold the values
+		values := make([]interface{}, len(columns))
+		valuePtrs := make([]interface{}, len(columns))
+		for i := range values {
+			valuePtrs[i] = &values[i]
+		}
+
+		// Scan the result into the value pointers
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return err
+		}
+
+		// Convert values to strings and write to CSV
+		record := make([]string, len(columns))
+		for i, val := range values {
+			if val != nil {
+				record[i] = fmt.Sprintf("%v", val)
+			}
+		}
+
+		if err := writer.Write(record); err != nil {
+			return err
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	writer.Flush()
+	err = writer.Error()
+	defer rows.Close()
+	defer csvFile.Close()
+	return err
 }
