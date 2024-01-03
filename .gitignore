@@ -32,3 +32,4 @@ bin/
 *.db
 *.db.wal
 *.parquet
+local_cache/
