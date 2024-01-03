@@ -132,7 +132,7 @@ func (rd *RepoDatabase) ExtractCommits() error {
 	// FIXME: remove limit or at least make it configurable.
 	limit := 1000
 	err = cIter.ForEach(func(c *object.Commit) error {
-		if count >= 1000 {
+		if count >= limit {
 			cIter.Close()
 			return ErrExitLoop
 		}

@@ -30,3 +30,5 @@ bin/
 *.duckdb
 *.csv
 *.db
+*.db.wal
+*.parquet

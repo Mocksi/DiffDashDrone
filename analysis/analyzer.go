@@ -2,9 +2,10 @@ package analysis
 
 import (
 	"database/sql"
-	"encoding/csv"
 	"fmt"
-	"os"
+
+	"github.com/xitongsys/parquet-go-source/local"
+	"github.com/xitongsys/parquet-go/writer"
 
 	"github.com/mocksi/diffdash-drone/storage"
 )
@@ -113,57 +114,71 @@ func QueryForExport(rd *storage.RepoDatabase) (*sql.Rows, error) {
 	return rd.Database.Query(query)
 }
 
+type ExportRow struct {
+	Filename          string `parquet:"name=filename, type=BYTE_ARRAY, encoding=PLAIN_DICTIONARY"`
+	Message           string `parquet:"name=message, type=BYTE_ARRAY, encoding=PLAIN_DICTIONARY"`
+	AuthorEmail       string `parquet:"name=author_email, type=BYTE_ARRAY, encoding=PLAIN_DICTIONARY"`
+	Hash              string `parquet:"name=hash, type=BYTE_ARRAY, encoding=PLAIN_DICTIONARY"`
+	BugSpotLikelihood string `parquet:"name=bug_spot_likelihood, type=BYTE_ARRAY, encoding=PLAIN_DICTIONARY"`
+	CommitTimestamp   string `parquet:"name=commit_timestamp, type=BYTE_ARRAY, convertedtype=DATETIME"`
+}
+
 func AnalyzeWithLLM(rd *storage.RepoDatabase) error {
 	rows, err := QueryForExport(rd)
 	if err != nil {
 		return err
 	}
-	// FIXME: we must use Parquet because CSV files are too large to be practical.
-	csvFile, err := os.Create("output.csv")
+
+	fw, err := local.NewLocalFileWriter("output.parquet")
 	if err != nil {
 		return err
 	}
 
-	writer := csv.NewWriter(csvFile)
+	pw, err := writer.NewParquetWriter(fw, new(ExportRow), 2)
+	if err != nil {
+		return err
+	}
+
 	columns, err := rows.Columns()
 	if err != nil {
 		return err
 	}
-	if err := writer.Write(columns); err != nil {
-		return err
-	}
 	for rows.Next() {
-		// Create a slice of empty interfaces to hold the values
 		values := make([]interface{}, len(columns))
 		valuePtrs := make([]interface{}, len(columns))
 		for i := range values {
 			valuePtrs[i] = &values[i]
 		}
 
-		// Scan the result into the value pointers
 		if err := rows.Scan(valuePtrs...); err != nil {
 			return err
 		}
 
-		// Convert values to strings and write to CSV
 		record := make([]string, len(columns))
 		for i, val := range values {
 			if val != nil {
 				record[i] = fmt.Sprintf("%v", val)
 			}
 		}
+		exportRow := ExportRow{
+			Filename:          fmt.Sprintf("%v", record[0]),
+			Message:           fmt.Sprintf("%v", record[1]),
+			AuthorEmail:       fmt.Sprintf("%v", record[2]),
+			Hash:              fmt.Sprintf("%v", record[3]),
+			BugSpotLikelihood: fmt.Sprintf("%v", record[4]),
+			CommitTimestamp:   fmt.Sprintf("%v", record[5]),
+		}
 
-		if err := writer.Write(record); err != nil {
-			return err
+		if err := pw.Write(exportRow); err != nil {
+			fmt.Printf("Error writing row %v. Details : %v", exportRow, err)
 		}
 	}
 
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	writer.Flush()
-	err = writer.Error()
+	err = pw.WriteStop()
 	defer rows.Close()
-	defer csvFile.Close()
+	defer fw.Close()
 	return err
 }
