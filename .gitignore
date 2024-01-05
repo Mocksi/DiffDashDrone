@@ -31,5 +31,6 @@ bin/
 *.csv
 *.db
 *.db.wal
-*.parquet
 local_cache/
+*.parquet
+.ipynb_checkpoints/
