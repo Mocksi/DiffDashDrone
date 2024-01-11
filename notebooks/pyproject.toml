@@ -12,6 +12,7 @@ openai = "^1.6.1"
 qdrant-client = {extras = ["fastembed"], version = "^1.7.0"}
 pyarrow = "^14.0.2"
 tqdm = "^4.66.1"
+langchain-openai = "^0.0.2"
 
 
 [tool.poetry.group.dev.dependencies]

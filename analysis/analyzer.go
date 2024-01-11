@@ -3,6 +3,8 @@ package analysis
 import (
 	"database/sql"
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/xitongsys/parquet-go-source/local"
 	"github.com/xitongsys/parquet-go/writer"
@@ -60,7 +62,7 @@ func FindBugspots(rd *storage.RepoDatabase) error {
 			CASE WHEN ac.all_count > 0 THEN fc.fixes_count::FLOAT / ac.all_count ELSE 0 END as bug_spot_likelihood
 		FROM fix_commits fc
 		JOIN all_commits ac ON fc.filename = ac.filename
-		ORDER BY fc.fixes_count DESC LIMIT 10;
+		ORDER BY bug_spot_likelihood DESC LIMIT 10;
 	`
 	rows, err := rd.Database.Query(query)
 	if err != nil {
@@ -105,22 +107,34 @@ func QueryForExport(rd *storage.RepoDatabase) (*sql.Rows, error) {
 			FROM all_commits ac
 			LEFT JOIN fix_commits fc ON ac.filename = fc.filename
 		)
-		SELECT DISTINCT bss.filename, c.message, c.author_email, c.hash, bss.bug_spot_likelihood,  c.commit_timestamp
-		FROM bug_spot_scores bss
-		JOIN repos.file f ON bss.filename = f.name
-		JOIN repos.commits c ON f.commit_hash = c.hash
-		ORDER BY bss.filename, c.commit_timestamp DESC;
+		SELECT 
+			c.hash, 
+			c.message, 
+			c.author_email, 
+			ARRAY_AGG(DISTINCT f.name) as filenames, 
+			AVG(bss.bug_spot_likelihood) as avg_bug_spot_likelihood, 
+			c.commit_timestamp
+		FROM 
+			repos.commits c
+		JOIN 
+			repos.file f ON c.hash = f.commit_hash
+		LEFT JOIN 
+			bug_spot_scores bss ON f.name = bss.filename
+		GROUP BY 
+			c.hash, c.message, c.author_email, c.commit_timestamp
+		ORDER BY 
+			c.commit_timestamp DESC;
 	`
 	return rd.Database.Query(query)
 }
 
 type ExportRow struct {
-	Filename          string `parquet:"name=filename, type=BYTE_ARRAY, encoding=PLAIN_DICTIONARY"`
-	Message           string `parquet:"name=message, type=BYTE_ARRAY, encoding=PLAIN_DICTIONARY"`
-	AuthorEmail       string `parquet:"name=author_email, type=BYTE_ARRAY, encoding=PLAIN_DICTIONARY"`
-	Hash              string `parquet:"name=hash, type=BYTE_ARRAY, encoding=PLAIN_DICTIONARY"`
-	BugSpotLikelihood string `parquet:"name=bug_spot_likelihood, type=BYTE_ARRAY, encoding=PLAIN_DICTIONARY"`
-	CommitTimestamp   string `parquet:"name=commit_timestamp, type=BYTE_ARRAY, convertedtype=DATETIME"`
+	Hash              string   `parquet:"name=hash, type=BYTE_ARRAY, encoding=PLAIN_DICTIONARY"`
+	Message           string   `parquet:"name=message, type=BYTE_ARRAY, encoding=PLAIN_DICTIONARY"`
+	AuthorEmail       string   `parquet:"name=author_email, type=BYTE_ARRAY, encoding=PLAIN_DICTIONARY"`
+	Filenames         []string `parquet:"name=filename, type=BYTE_ARRAY, encoding=PLAIN_DICTIONARY, repetitiontype=REPEATED"`
+	BugSpotLikelihood string   `parquet:"name=bug_spot_likelihood, type=BYTE_ARRAY, encoding=PLAIN_DICTIONARY"`
+	CommitTimestamp   string   `parquet:"name=commit_timestamp, type=BYTE_ARRAY, convertedtype=DATETIME"`
 }
 
 func AnalyzeWithLLM(rd *storage.RepoDatabase) error {
@@ -160,11 +174,13 @@ func AnalyzeWithLLM(rd *storage.RepoDatabase) error {
 				record[i] = fmt.Sprintf("%v", val)
 			}
 		}
+		filenames := strings.Split(fmt.Sprintf("%v", values[3]), ",")
+		sort.Strings(filenames)
 		exportRow := ExportRow{
-			Filename:          fmt.Sprintf("%v", record[0]),
+			Hash:              fmt.Sprintf("%v", record[0]),
 			Message:           fmt.Sprintf("%v", record[1]),
 			AuthorEmail:       fmt.Sprintf("%v", record[2]),
-			Hash:              fmt.Sprintf("%v", record[3]),
+			Filenames:         filenames,
 			BugSpotLikelihood: fmt.Sprintf("%v", record[4]),
 			CommitTimestamp:   fmt.Sprintf("%v", record[5]),
 		}
