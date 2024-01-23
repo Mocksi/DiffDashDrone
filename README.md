@@ -69,9 +69,8 @@ Note: If neither `--parquet` nor `--bugspots` are specified, both a Parquet file
 - [x] Create a Storage package
 - [x] Store all Git data in a DuckDB database.
 - [x] Create an Analyzer package
-- [ ] Create a Reporter package
-- [ ] Hook up to the LLM cli
-- [ ] Make magic happen
+- [x] Create a Reporter package (implemented via Notebooks)
+- [x] Make magic happen
 - [ ] Build release binaries
 - [ ] Add a --help option
 - [ ] Add a --version option
